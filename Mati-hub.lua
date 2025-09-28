@@ -1,67 +1,50 @@
--- LocalScript: PrivateServerButton.lua
--- Colocar en StarterPlayerScripts
+-- LocalScript: JoinPrivateServer.lua
+-- Colocar en StarterPlayerScripts (ejecución en cliente)
+-- Reemplaza TARGET_PLACE_ID con el placeId numérico si el enlace pertenece a otro Place.
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 
--- URL de share
+-- Link de server privado (el que me diste)
 local shareUrl = "https://www.roblox.com/share?code=211f5472b043d54baefff34b70e54812&type=Server"
 
--- Si conoces el PlaceId del juego, puedes ponerlo aquí
--- Si es el mismo juego actual, se usa game.PlaceId
-local TARGET_PLACE_ID = nil 
+-- Si conoces el PlaceId del juego objetivo, ponlo aquí (por ejemplo: 123456789)
+-- Si el server privado es del mismo Place donde corre el script, déjalo en nil para usar game.PlaceId
+local TARGET_PLACE_ID = nil
 
--- ----- Parsear parámetros de la URL -----
+-- función para leer parámetros query de la URL
 local function getQueryParam(url, key)
 	if not url or not key then return nil end
 	local pattern = key .. "=([^&]+)"
-	local found = string.match(url, pattern)
-	return found
+	return string.match(url, pattern)
 end
 
 local code = getQueryParam(shareUrl, "code")
+local typ  = getQueryParam(shareUrl, "type")
 local placeId = TARGET_PLACE_ID or tonumber(game.PlaceId)
 
--- ----- Crear UI -----
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "PrivateServerGui"
-screenGui.Parent = player:WaitForChild("PlayerGui")
+-- Intentar teletransportar al servidor privado
+if not code then
+	warn("[JoinPrivateServer] No se encontró el parámetro 'code' en la URL. Imposible unirse automáticamente.")
+	return
+end
 
-local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 200, 0, 50)
-button.Position = UDim2.new(1, -210, 0, 10) -- esquina superior derecha
-button.AnchorPoint = Vector2.new(0, 0) -- anclaje arriba a la derecha
-button.Text = "Private Server Free"
-button.TextScaled = true
-button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-button.TextColor3 = Color3.fromRGB(255, 255, 255)
-button.Font = Enum.Font.SourceSansBold
-button.Parent = screenGui
-button.AutoButtonColor = true
-button.BackgroundTransparency = 0.1
-button.BorderSizePixel = 0
+if not placeId then
+	warn("[JoinPrivateServer] placeId desconocido. Si este link pertenece a otro Place, asigna TARGET_PLACE_ID con el placeId numérico.")
+	return
+end
 
--- Efecto hover
-button.MouseEnter:Connect(function()
-	button.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-end)
-button.MouseLeave:Connect(function()
-	button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+-- Intentamos TeleportToPlaceInstance
+local ok, err = pcall(function()
+	TeleportService:TeleportToPlaceInstance(placeId, code, player)
 end)
 
--- ----- Acción del botón -----
-button.MouseButton1Click:Connect(function()
-	if not code then
-		warn("No se encontró el parámetro 'code' en la URL.")
-		return
-	end
+if ok then
+	print("[JoinPrivateServer] Intentando unirse al servidor privado (instanceId = "..tostring(code)..").")
+else
+	warn("[JoinPrivateServer] Error al intentar TeleportToPlaceInstance: "..tostring(err))
+end
 
-	local success, err = pcall(function()
-		TeleportService:TeleportToPlaceInstance(placeId, code, player)
-	end)
-
-	if not success then
-		warn("Error al intentar unirse: " .. tostring(err))
-	end
-end)
+-- Opcional: si prefieres que esto se haga con un botón en vez de ejecutarse automáticamente,
+-- cambia el comportamiento para crear una GUI y llamar al Teleport desde el MouseButton1Click.
