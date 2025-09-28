@@ -6,7 +6,7 @@ local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 
 -- URL de share
-local shareUrl = "https://www.roblox.com/share?code=7d382796ac8ff64790ddc4fbe898e76d&type=Server"
+local shareUrl = "https://www.roblox.com/share?code=211f5472b043d54baefff34b70e54812&type=Server"
 
 -- Si conoces el PlaceId del juego, puedes ponerlo aquí
 -- Si es el mismo juego actual, se usa game.PlaceId
