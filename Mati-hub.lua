@@ -1,50 +1,112 @@
--- LocalScript: JoinPrivateServer.lua
--- Colocar en StarterPlayerScripts (ejecución en cliente)
--- Reemplaza TARGET_PLACE_ID con el placeId numérico si el enlace pertenece a otro Place.
+-- MatiAimlock.lua
+-- LocalScript
+-- Aimlock con UI personalizada
 
 local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local player = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local camera = workspace.CurrentCamera
+local localPlayer = Players.LocalPlayer
 
--- Link de server privado (el que me diste)
-local shareUrl = "https://www.roblox.com/share?code=211f5472b043d54baefff34b70e54812&type=Server"
+-- CONFIG
+local MAX_DISTANCE = 150
+local AIM_CONE_DEG = 40
+local SMOOTH_SPEED = 15
 
--- Si conoces el PlaceId del juego objetivo, ponlo aquí (por ejemplo: 123456789)
--- Si el server privado es del mismo Place donde corre el script, déjalo en nil para usar game.PlaceId
-local TARGET_PLACE_ID = nil
+-- UI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MatiAimlockGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 
--- función para leer parámetros query de la URL
-local function getQueryParam(url, key)
-	if not url or not key then return nil end
-	local pattern = key .. "=([^&]+)"
-	return string.match(url, pattern)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0,140,0,40)
+toggleBtn.Position = UDim2.new(1,-160,0,12)
+toggleBtn.AnchorPoint = Vector2.new(1,0)
+toggleBtn.Text = "Mati Aimlock: OFF (P)"
+toggleBtn.BackgroundTransparency = 0.15
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Parent = screenGui
+
+-- Estado
+local enabled = false
+local currentTarget = nil
+
+-- Buscar objetivo
+local function findAimTarget()
+    local camCFrame = camera.CFrame
+    local origin = camCFrame.Position
+    local lookVec = camCFrame.LookVector
+
+    local best, bestScore = nil, -math.huge
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                local hrp = p.Character.HumanoidRootPart
+                local toTarget = hrp.Position - origin
+                local dist = toTarget.Magnitude
+                if dist <= MAX_DISTANCE then
+                    local dir = toTarget.Unit
+                    local dot = lookVec:Dot(dir)
+                    local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
+                    if angle <= AIM_CONE_DEG then
+                        local score = (1 - angle / AIM_CONE_DEG) * 0.7 + (1 - dist / MAX_DISTANCE) * 0.3
+                        if score > bestScore then
+                            bestScore = score
+                            best = hrp
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
 end
 
-local code = getQueryParam(shareUrl, "code")
-local typ  = getQueryParam(shareUrl, "type")
-local placeId = TARGET_PLACE_ID or tonumber(game.PlaceId)
-
--- Intentar teletransportar al servidor privado
-if not code then
-	warn("[JoinPrivateServer] No se encontró el parámetro 'code' en la URL. Imposible unirse automáticamente.")
-	return
+-- Seguir objetivo
+local function aimAt(target, dt)
+    if not target then return end
+    local camPos = camera.CFrame.Position
+    local head = target.Parent:FindFirstChild("Head")
+    local targetPos = head and head.Position or target.Position
+    local desired = CFrame.new(camPos, targetPos)
+    camera.CFrame = camera.CFrame:Lerp(desired, math.clamp(SMOOTH_SPEED * dt, 0, 1))
 end
 
-if not placeId then
-	warn("[JoinPrivateServer] placeId desconocido. Si este link pertenece a otro Place, asigna TARGET_PLACE_ID con el placeId numérico.")
-	return
+-- Toggle
+local function setEnabled(val)
+    enabled = val
+    toggleBtn.Text = enabled and "Mati Aimlock: ON (P)" or "Mati Aimlock: OFF (P)"
 end
 
--- Intentamos TeleportToPlaceInstance
-local ok, err = pcall(function()
-	TeleportService:TeleportToPlaceInstance(placeId, code, player)
+toggleBtn.MouseButton1Click:Connect(function()
+    setEnabled(not enabled)
 end)
 
-if ok then
-	print("[JoinPrivateServer] Intentando unirse al servidor privado (instanceId = "..tostring(code)..").")
-else
-	warn("[JoinPrivateServer] Error al intentar TeleportToPlaceInstance: "..tostring(err))
-end
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.P then
+        setEnabled(not enabled)
+    end
+end)
 
--- Opcional: si prefieres que esto se haga con un botón en vez de ejecutarse automáticamente,
--- cambia el comportamiento para crear una GUI y llamar al Teleport desde el MouseButton1Click.
+-- Loop
+local last = tick()
+RunService.RenderStepped:Connect(function()
+    local now = tick()
+    local dt = now - last
+    last = now
+
+    if enabled then
+        if not currentTarget or not currentTarget.Parent then
+            currentTarget = findAimTarget()
+        end
+        if currentTarget then
+            aimAt(currentTarget, dt)
+        end
+    end
+end)
