@@ -1,112 +1,165 @@
--- MatiAimlock.lua
--- LocalScript
--- Aimlock con UI personalizada
-
+--==============================
+-- SERVICIOS
+--==============================
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local camera = workspace.CurrentCamera
-local localPlayer = Players.LocalPlayer
 
--- CONFIG
-local MAX_DISTANCE = 150
-local AIM_CONE_DEG = 40
-local SMOOTH_SPEED = 15
+local player = Players.LocalPlayer
 
+--==============================
+-- CONFIGURACIÓN
+--==============================
+local TWEEN_TIME = 2
+local RESTART_WAIT = 10
+
+local points = {
+	{Vector3.new(4.3, 14.7, -85.3), 3},
+	{Vector3.new(-46.1, 69.8, 8640.1), 3},
+	{Vector3.new(-47.9, -359.8, 9403.1), 3},
+	{Vector3.new(-55.0, -356.0, 9490.4), 10},
+}
+
+--==============================
 -- UI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "MatiAimlockGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+--==============================
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoFarmWinsUI"
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0,140,0,40)
-toggleBtn.Position = UDim2.new(1,-160,0,12)
-toggleBtn.AnchorPoint = Vector2.new(1,0)
-toggleBtn.Text = "Mati Aimlock: OFF (P)"
-toggleBtn.BackgroundTransparency = 0.15
-toggleBtn.BorderSizePixel = 0
-toggleBtn.Font = Enum.Font.SourceSansBold
-toggleBtn.TextSize = 16
-toggleBtn.Parent = screenGui
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 280, 0, 160)
+frame.Position = UDim2.new(0.5, -140, 0.4, 0)
+frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+frame.Active = true
+frame.Parent = gui
 
--- Estado
-local enabled = false
-local currentTarget = nil
+local frameCorner = Instance.new("UICorner", frame)
+frameCorner.CornerRadius = UDim.new(0, 18)
 
--- Buscar objetivo
-local function findAimTarget()
-    local camCFrame = camera.CFrame
-    local origin = camCFrame.Position
-    local lookVec = camCFrame.LookVector
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 45)
+title.BackgroundTransparency = 1
+title.Text = "🏆 Auto Farm Mati 💥"
+title.Font = Enum.Font.Cartoon
+title.TextSize = 22
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Parent = frame
 
-    local best, bestScore = nil, -math.huge
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0.85, 0, 0, 50)
+button.Position = UDim2.new(0.075, 0, 0.55, 0)
+button.BackgroundColor3 = Color3.fromRGB(40,40,40)
+button.Text = "ACTIVAR"
+button.Font = Enum.Font.Cartoon
+button.TextSize = 20
+button.TextColor3 = Color3.fromRGB(255,255,255)
+button.Parent = frame
 
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local hum = p.Character:FindFirstChild("Humanoid")
-            if hum and hum.Health > 0 then
-                local hrp = p.Character.HumanoidRootPart
-                local toTarget = hrp.Position - origin
-                local dist = toTarget.Magnitude
-                if dist <= MAX_DISTANCE then
-                    local dir = toTarget.Unit
-                    local dot = lookVec:Dot(dir)
-                    local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
-                    if angle <= AIM_CONE_DEG then
-                        local score = (1 - angle / AIM_CONE_DEG) * 0.7 + (1 - dist / MAX_DISTANCE) * 0.3
-                        if score > bestScore then
-                            bestScore = score
-                            best = hrp
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
+local buttonCorner = Instance.new("UICorner", button)
+buttonCorner.CornerRadius = UDim.new(0, 16)
 
--- Seguir objetivo
-local function aimAt(target, dt)
-    if not target then return end
-    local camPos = camera.CFrame.Position
-    local head = target.Parent:FindFirstChild("Head")
-    local targetPos = head and head.Position or target.Position
-    local desired = CFrame.new(camPos, targetPos)
-    camera.CFrame = camera.CFrame:Lerp(desired, math.clamp(SMOOTH_SPEED * dt, 0, 1))
-end
+--==============================
+-- DRAG (PC + MÓVIL)
+--==============================
+local dragging = false
+local dragStart, startPos
 
--- Toggle
-local function setEnabled(val)
-    enabled = val
-    toggleBtn.Text = enabled and "Mati Aimlock: ON (P)" or "Mati Aimlock: OFF (P)"
-end
+frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+	or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
 
-toggleBtn.MouseButton1Click:Connect(function()
-    setEnabled(not enabled)
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
 end)
 
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.P then
-        setEnabled(not enabled)
-    end
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+	or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(
+			startPos.X.Scale, startPos.X.Offset + delta.X,
+			startPos.Y.Scale, startPos.Y.Offset + delta.Y
+		)
+	end
 end)
 
--- Loop
-local last = tick()
-RunService.RenderStepped:Connect(function()
-    local now = tick()
-    local dt = now - last
-    last = now
+--==============================
+-- FLOTAR
+--==============================
+local active = false
+local floatForce, gyro
 
-    if enabled then
-        if not currentTarget or not currentTarget.Parent then
-            currentTarget = findAimTarget()
-        end
-        if currentTarget then
-            aimAt(currentTarget, dt)
-        end
-    end
+local function enableFloat(hrp)
+	floatForce = Instance.new("BodyVelocity")
+	floatForce.Velocity = Vector3.zero
+	floatForce.MaxForce = Vector3.new(0, math.huge, 0)
+	floatForce.Parent = hrp
+
+	gyro = Instance.new("BodyGyro")
+	gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	gyro.CFrame = hrp.CFrame
+	gyro.Parent = hrp
+end
+
+local function disableFloat()
+	if floatForce then floatForce:Destroy() end
+	if gyro then gyro:Destroy() end
+end
+
+--==============================
+-- MOVIMIENTO
+--==============================
+local function tweenTo(hrp, position)
+	local tween = TweenService:Create(
+		hrp,
+		TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Linear),
+		{CFrame = CFrame.new(position)}
+	)
+	tween:Play()
+	tween.Completed:Wait()
+end
+
+--==============================
+-- CICLO PRINCIPAL
+--==============================
+local function startFarm()
+	while active do
+		local char = player.Character or player.CharacterAdded:Wait()
+		local hrp = char:WaitForChild("HumanoidRootPart")
+
+		enableFloat(hrp)
+
+		for _, data in ipairs(points) do
+			if not active then break end
+			tweenTo(hrp, data[1])
+			task.wait(data[2])
+		end
+
+		task.wait(RESTART_WAIT)
+	end
+end
+
+--==============================
+-- BOTÓN
+--==============================
+button.MouseButton1Click:Connect(function()
+	active = not active
+
+	if active then
+		button.Text = "DESACTIVAR"
+		button.BackgroundColor3 = Color3.fromRGB(70,120,70)
+		task.spawn(startFarm)
+	else
+		button.Text = "ACTIVAR"
+		button.BackgroundColor3 = Color3.fromRGB(40,40,40)
+		disableFloat()
+	end
 end)
